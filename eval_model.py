@@ -10,6 +10,7 @@ from importlib.machinery import SourceFileLoader
 from ged import ged
 
 parser = argparse.ArgumentParser(description='Supervised uncertainty quantification')
+parser.add_argument('--model', type = str, default = 'vanilla_uq', help = 'vanilla or shape uq')
 parser.add_argument('--random_seed', type=int, default=123, help='random seed')
 parser.add_argument('--ckpt_filename', type=str, help='checkpoint file')
 opt = parser.parse_args()
@@ -54,7 +55,10 @@ print("Number of train/val/test patches:", (len(train_indices), len(val_indices)
 
 
 def load_net(cf, ckpt_filename):
-    net = ProbabilisticUnet(input_channels=cf.input_channels, num_classes=cf.num_classes, num_filters=cf.num_filters, latent_dim=cf.latent_dim, no_convs_fcomb=cf.no_convs_fcomb, beta=cf.beta)
+    if opt.model == "vanilla_uq":
+        net = ProbabilisticUnet(input_channels=cf.input_channels, num_classes=cf.num_classes, num_filters=cf.num_filters, latent_dim=cf.latent_dim, no_convs_fcomb=cf.no_convs_fcomb, beta=cf.beta)
+    elif opt.model == "shape_uq":
+        net = KendallProbUnet(input_channels=cf.input_channels, num_classes=cf.num_classes, num_filters=cf.num_filters, k = cf.k, m = cf.m, no_convs_fcomb=cf.no_convs_fcomb, beta=cf.beta, beta_w=cf.beta_w)
     net.to(device)
 
     net.load_state_dict(torch.load(ckpt_filename))
