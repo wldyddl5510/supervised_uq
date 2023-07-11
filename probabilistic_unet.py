@@ -4,6 +4,12 @@ from utils import init_weights,init_weights_orthogonal_normal, l2_regularisation
 import torch.nn.functional as F
 from torch.distributions import Normal, Independent, kl
 
+# for shape vae
+from distributions import HypersphericalUniform, VonMisesFisher
+# escnn library for implementing equivariant CNN -> This will be used to make Kendall shape space embedding
+from escnn import gspaces
+from escnn import nn as escnn_nn
+
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 class Encoder(nn.Module):
@@ -47,6 +53,66 @@ class Encoder(nn.Module):
     def forward(self, input):
         output = self.layers(input)
         return output
+
+
+"""
+escnn encoder to encode equivariant layer
+Use N = 8 for temporary
+"""
+class EquiEncoder(Encoder):
+
+
+    def __init__(self, input_channels, num_filters, no_convs_per_block, initializer, padding = True, posterior = False):
+        super().__init__(input_channels, num_filters, no_convs_per_block, initializer, padding, posterior)
+        # define equivariant encoder
+        # code from https://uvadlc-notebooks.readthedocs.io/en/latest/tutorial_notebooks/DL2/Geometric_deep_learning/tutorial2_steerable_cnns.html#3.-Build-and-Train-Steerable-CNNs
+        # rotation axis N = 8 stands for 8 directions
+        self.r2_act = gspaces.rot2dOnR2(N = 8)
+        in_type = escnn_nn.FieldType(self.r2_act, self.input_channels * [self.r2_act.trivial_repr])
+        self.input_type = in_type
+
+        # construct layers
+        layers = []
+        for i in range(len(self.num_filters)):
+            #TODO: implement equivariant encoder
+            out_type = escnn_nn.FieldType(self.r2_act, num_filters[i] * [self.r2_act.regular_repr])
+            # other than 1st layer
+            if i != 0:
+                in_type = layers[-1].out_type
+                layers.append(escnn_nn.PointwiseAvgPool2D(in_type, kernel_size=2, stride=2, padding=0, ceil_mode=True))
+                # in_type comes from the out_type of previous layers
+            # first layer
+            else:
+                # i = 0
+                # we store the input type for wrapping the images into a geometric tensor during the forward pass
+                # We need to mask the input image since the corners are moved outside the grid under rotations
+                
+                layers.append(escnn_nn.MaskModule(self.input_type, 128, margin=1))
+            
+            layers.append(escnn_nn.R2Conv(in_type, out_type, kernel_size=3, padding=int(padding), bias = False))
+            layers.append(escnn_nn.InnerBatchNorm(out_type))
+            layers.append(escnn_nn.ReLU(out_type, inplace=True))
+
+            #for _ in range(no_convs_per_block-1):
+            #    layers.append(nn.Conv2d(output_dim, output_dim, kernel_size=3, padding=int(padding)))
+            #    layers.append(nn.ReLU(inplace=True))
+
+
+        # aggregate the layer and make a model
+        # aggregate group operations
+        layers.append(escnn_nn.GroupPooling(out_type))
+        self.layers = escnn_nn.SequentialModule(*layers)
+        # init
+        # self.layers_apply(init_weights)
+
+
+    def forward(self, input):
+        # convert into geometric tensor
+        input_geom = escnn_nn.GeometricTensor(input, self.input_type)
+        #input_geom = self.input_type(input)
+        input_geom = self.layers(input_geom)
+        return input_geom.tensor
+
 
 class AxisAlignedConvGaussian(nn.Module):
     """
@@ -105,6 +171,91 @@ class AxisAlignedConvGaussian(nn.Module):
         #This is a multivariate normal with diagonal covariance matrix sigma
         #https://github.com/pytorch/pytorch/pull/11178
         dist = Independent(Normal(loc=mu, scale=torch.exp(log_sigma)),1)
+        return dist
+
+
+"""
+NN to return Von Mises Fisher distributions on the Kendall Shape space instead of vanilla Gaussian.
+Return mu, concentration, and rotation vector
+"""
+class KendallShapeVmf(AxisAlignedConvGaussian):
+
+    def __init__(self, input_channels, num_filters, no_convs_per_block, k, m, initializers, posterior=False):
+        super().__init__(input_channels, num_filters, no_convs_per_block, k * m, initializers, posterior)
+        # append last filter as latent dim
+        self.k = k
+        self.m = m
+        self.encoder_mu = EquiEncoder(self.input_channels, self.num_filters, self.no_convs_per_block, initializers, posterior=self.posterior)
+        # out_dim = self.encoder_mu.layers[-1].out_type.size
+        self.conv_layer_mu = nn.Conv2d(num_filters[-1], self.latent_dim, kernel_size = 1, stride = 1)
+        # append last filter as 1 for concent
+        self.encoder_concent_rot = Encoder(self.input_channels, self.num_filters, self.no_convs_per_block, initializers, posterior = self.posterior)
+        #self.layer_concent = nn.Linear(self.num_filters[-1], 1)
+        #self.layer_rot = nn.Linear(self.num_filters[-1], 2)
+        # append last filter as 2 for rotation matrix
+        # self.encoder_rot = Encoder(self.input_channels, self.num_filters, self.no_convs_per_block, initializers, posterior = self.posterior)
+        self.conv_layer_concent = nn.Conv2d(num_filters[-1], 1, kernel_size = (1,1), stride = 1)
+        # return SO(m); need not be rotation equivariant
+        self.conv_layer_rot = nn.Conv2d(num_filters[-1], 2, kernel_size = (1,1), stride = 1)
+
+
+    def forward(self, input, segm=None):
+
+        #If segmentation is not none, concatenate the mask to the channel axis of the input
+        if segm is not None:
+            self.show_img = input
+            self.show_seg = segm
+            input = torch.cat((input, segm), dim=1)
+            self.show_concat = input
+            self.sum_input = torch.sum(input)
+        # encoder returns mu
+        encoding_mu = self.encoder_mu(input)
+        self.show_enc = encoding_mu
+        #We only want the mean of the resulting hxw image
+        encoding_mu = torch.mean(encoding_mu, dim = 2, keepdim = True)
+        encoding_mu = torch.mean(encoding_mu, dim = 3, keepdim = True)
+        mu = self.conv_layer_mu(encoding_mu)
+        # we squeeze the second dimension twice since o.w. won't work when batch size == 1
+        mu = torch.squeeze(mu, dim = 2)
+        mu = torch.squeeze(mu, dim = 2)
+        # m = 2 k = 4 for now.
+        # resize to the pre-shape space matrix
+        mu = mu.view(-1, self.m, self.k)
+        # m = 2 k = 4 for now. vmf loc parameter
+        # mean 0, unit vector columns
+        mu_mean = torch.mean(mu, dim = 1)
+        # mean 0
+        torch.sub(mu, mu_mean[:, None])
+        # normalize
+        mu = mu / mu.norm(p = 2.0)
+        # other variables need not be rotation invariant
+        concent_rot = self.encoder_concent_rot(input)
+        concent_rot = torch.mean(concent_rot, dim = 2, keepdim = True)
+        concent_rot = torch.mean(concent_rot, dim = 3, keepdim = True)
+        concent= self.conv_layer_concent(concent_rot)
+        rot = self.conv_layer_rot(concent_rot)
+        concent = torch.squeeze(concent, dim = 2)
+        concent = torch.squeeze(concent, dim = 2)
+        rot = torch.squeeze(rot, dim = 2)
+        rot = torch.squeeze(rot, dim = 2)
+        # + 1 prevent collapsing behavior 
+        concent = F.softplus(concent) + 1
+        # rotation matrix
+        rot = F.normalize(rot, p = 2.0, dim = 1)
+        # make rotation matrices
+        print(concent.shape)
+        rot = torch.stack((rot[:, 0], -rot[:, 1], rot[:, 1], rot[:, 0])).T.view(-1, self.m, self.m)
+        print(rot.shape)
+        # rot = torch.tensor([[rot[0], -rot[1]],[rot[1], rot[0]]])
+
+        # TODO: Implement rotation invariant vmf distribution, by mu_0 = rot^-1 *  mu
+        mu = torch.linalg.solve(rot, mu)
+
+        # vmf distribution with parameters from NN, with rotation invariance.
+        # for scaling and translation invariance, you first center and scale the input data.
+        # dist = Independent(Normal(loc=mu, scale=torch.exp(log_sigma)),1)
+        # convert 2 * 4 matrix by S^((k - 1) * m - 1)
+        dist = VonMisesFisher(mu, concent)
         return dist
 
 class Fcomb(nn.Module):
@@ -291,3 +442,15 @@ class ProbabilisticUnet(nn.Module):
         print('elbo ' + str(elbo.item()) + ', recon_loss ' + str(self.reconstruction_loss.item()) + ', kl_z ' + str(self.kl.item()))
 
         return elbo
+
+
+"""
+Probabilistic Unet with Kendall Shape space embedding
+"""
+class KendallProbUnet(ProbabilisticUnet):
+
+
+    def __init__(self, input_channels=1, num_classes=1, num_filters=[32,64,128,192], k = 4, m = 2, no_convs_fcomb=4, beta=10.0):
+        super().__init__(input_channels, num_classes, num_filters, k * m, no_convs_fcomb, beta)
+        self.prior = KendallShapeVmf(self.input_channels, self.num_filters, self.no_convs_per_block, k, m,  self.initializers).to(device)
+        self.posterior = KendallShapeVmf(self.input_channels, self.num_filters, self.no_convs_per_block, k, m, self.initializers, posterior=True).to(device)

@@ -6,10 +6,13 @@ from collections import OrderedDict
 
 config_path = os.path.realpath(__file__)
 
+model = "shape_uq"
 input_channels = 1
 num_classes = 1
 num_filters = [32,64,128,192]
 latent_dim = 6
+k = 4
+m = 2
 no_convs_fcomb = 4
 beta = 1.0 # for kl[q(z|x,y) || p(z|x)]
 beta_w = 1.0 # for kl[q(w) || p(w)]

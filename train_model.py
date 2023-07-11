@@ -13,6 +13,7 @@ from utils import l2_regularisation
 from importlib.machinery import SourceFileLoader
 
 parser = argparse.ArgumentParser(description='Supervised uncertainty quantification')
+# parser.add_argument('--model', type = str, default = 'vanilla_uq', help = 'vanilla or shape uq')
 parser.add_argument('--output_ckpt_dir', type=str, default='./checkpoints/', help='checkpoint directory')
 parser.add_argument('--entcoeff', type=float, default=1.0, help='coeffient for the entropy term')
 parser.add_argument('--mask1reweight', type=float, default=1.0, help='coeffient for reweighting the masks of 1s')
@@ -58,7 +59,10 @@ val_loader = DataLoader(dataset, batch_size=32, sampler=val_sampler)
 print("Number of train/val/test patches:", (len(train_indices), len(val_indices), len(test_indices)))
 
 def train(cf):
-    net = ProbabilisticUnet(input_channels=cf.input_channels, num_classes=cf.num_classes, num_filters=cf.num_filters, latent_dim=cf.latent_dim, no_convs_fcomb=cf.no_convs_fcomb, beta=cf.beta, beta_w=cf.beta_w)
+    if cf.model is 'vanilla_uq':
+        net = ProbabilisticUnet(input_channels=cf.input_channels, num_classes=cf.num_classes, num_filters=cf.num_filters, latent_dim=cf.latent_dim, no_convs_fcomb=cf.no_convs_fcomb, beta=cf.beta, beta_w=cf.beta_w)
+    elif cf.model is 'shape_uq':
+        net = KendallProbUnet(input_channels=cf.input_channels, num_classes=cf.num_classes, num_filters=cf.num_filters, k = cd.k, m = cf.m, no_convs_fcomb=cf.no_convs_fcomb, beta=cf.beta, beta_w=cf.beta_w)
     net.to(device)
 
     net.train()
