@@ -6,7 +6,7 @@ from collections import OrderedDict
 
 config_path = os.path.realpath(__file__)
 
-model = "shape_uq"
+model = "vanilla_uq"
 input_channels = 1
 num_classes = 1
 num_filters = [32,64,128,192]
@@ -21,4 +21,4 @@ adam_weight_decay = 0
 epochs = 801
 l2_reg_coeff = 1e-5
 train_retention_rate = 1.
-dataset_location = '/home/shu/images/lidc/'
+dataset_location = './LIDC_data/'
