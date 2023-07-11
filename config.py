@@ -22,4 +22,4 @@ epochs = 50
 l2_reg_coeff = 1e-5
 train_retention_rate = 1.
 dataset_location = './LIDC_data/'
-save = False
+save = True
