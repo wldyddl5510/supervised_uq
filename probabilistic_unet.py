@@ -2,13 +2,17 @@ from unet_blocks import *
 from unet import Unet
 from utils import init_weights,init_weights_orthogonal_normal, l2_regularisation
 import torch.nn.functional as F
-from torch.distributions import Normal, Independent, kl
+from torch.distributions import Normal, Independent, kl, VonMises
 
 # for shape vae
 from distributions import HypersphericalUniform, VonMisesFisher
+from scipy.linalg import helmert
 # escnn library for implementing equivariant CNN -> This will be used to make Kendall shape space embedding
 from escnn import gspaces
 from escnn import nn as escnn_nn
+
+# debugging
+import pdb
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
@@ -186,12 +190,9 @@ class KendallShapeVmf(AxisAlignedConvGaussian):
         self.k = k
         self.m = m
         self.encoder_mu = EquiEncoder(self.input_channels, self.num_filters, self.no_convs_per_block, initializers, posterior=self.posterior)
-        # out_dim = self.encoder_mu.layers[-1].out_type.size
         self.conv_layer_mu = nn.Conv2d(num_filters[-1], self.latent_dim, kernel_size = 1, stride = 1)
         # append last filter as 1 for concent
-        self.encoder_concent_rot = Encoder(self.input_channels, self.num_filters, self.no_convs_per_block, initializers, posterior = self.posterior)
-        #self.layer_concent = nn.Linear(self.num_filters[-1], 1)
-        #self.layer_rot = nn.Linear(self.num_filters[-1], 2)
+        # self.encoder_concent_rot = Encoder(self.input_channels, self.num_filters, self.no_convs_per_block, initializers, posterior = self.posterior)
         # append last filter as 2 for rotation matrix
         # self.encoder_rot = Encoder(self.input_channels, self.num_filters, self.no_convs_per_block, initializers, posterior = self.posterior)
         self.conv_layer_concent = nn.Conv2d(num_filters[-1], 1, kernel_size = (1,1), stride = 1)
@@ -229,7 +230,7 @@ class KendallShapeVmf(AxisAlignedConvGaussian):
         # normalize
         mu = mu / mu.norm(p = 2.0)
         # other variables need not be rotation invariant
-        concent_rot = self.encoder_concent_rot(input)
+        concent_rot = self.encoder(input)
         concent_rot = torch.mean(concent_rot, dim = 2, keepdim = True)
         concent_rot = torch.mean(concent_rot, dim = 3, keepdim = True)
         concent= self.conv_layer_concent(concent_rot)
@@ -243,19 +244,26 @@ class KendallShapeVmf(AxisAlignedConvGaussian):
         # rotation matrix
         rot = F.normalize(rot, p = 2.0, dim = 1)
         # make rotation matrices
-        print(concent.shape)
         rot = torch.stack((rot[:, 0], -rot[:, 1], rot[:, 1], rot[:, 0])).T.view(-1, self.m, self.m)
-        print(rot.shape)
-        # rot = torch.tensor([[rot[0], -rot[1]],[rot[1], rot[0]]])
 
         # TODO: Implement rotation invariant vmf distribution, by mu_0 = rot^-1 *  mu
         mu = torch.linalg.solve(rot, mu)
-
+        # convert mu to hypersphere object
+        hel = torch.from_numpy(helmert(mu.shape[2], full = False)).T.to(device)
+        h_mu = mu @ hel.float()
+        #pdb.set_trace()
+        h_mu = h_mu.view(-1, (self.k - 1) * self.m)
+        mu = F.normalize(h_mu, p = 2.0, dim = 1)
+        #mu = mu.view(-1)
         # vmf distribution with parameters from NN, with rotation invariance.
         # for scaling and translation invariance, you first center and scale the input data.
         # dist = Independent(Normal(loc=mu, scale=torch.exp(log_sigma)),1)
         # convert 2 * 4 matrix by S^((k - 1) * m - 1)
-        dist = VonMisesFisher(mu, concent)
+        #dist = Independent(VonMises(mu, concent), 1)
+#if self.posterior:
+        dist = Independent(VonMisesFisher(mu, concent), 1)
+#else:
+#dist = Independent(HypersphericalUniform(mu.shape), 1)
         return dist
 
 class Fcomb(nn.Module):
@@ -417,7 +425,7 @@ class ProbabilisticUnet(nn.Module):
             kl_div = log_posterior_prob - log_prior_prob
         return kl_div
 
-    def elbo(self, segm, analytic_kl=True, reconstruct_posterior_mean=False):
+    def elbo(self, segm, analytic_kl=False, reconstruct_posterior_mean=False):
         """
         Calculate the evidence lower bound of the log-likelihood of P(Y|X)
         modified Eq. (4) of https://arxiv.org/abs/1806.05034
@@ -453,4 +461,5 @@ class KendallProbUnet(ProbabilisticUnet):
     def __init__(self, input_channels=1, num_classes=1, num_filters=[32,64,128,192], k = 4, m = 2, no_convs_fcomb=4, beta=1.0, beta_w = 1.0):
         super().__init__(input_channels, num_classes, num_filters, k * m, no_convs_fcomb, beta, beta_w)
         self.prior = KendallShapeVmf(self.input_channels, self.num_filters, self.no_convs_per_block, k, m,  self.initializers).to(device)
+        #self.prior = Independent(HypersphericalUniform((k - 1) * m - 1).to(device)
         self.posterior = KendallShapeVmf(self.input_channels, self.num_filters, self.no_convs_per_block, k, m, self.initializers, posterior=True).to(device)
