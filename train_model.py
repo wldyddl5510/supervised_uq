@@ -8,7 +8,7 @@ from torch.utils.data import DataLoader
 from torch.utils.data.sampler import SubsetRandomSampler
 from torch.distributions import Normal, Independent, kl
 from load_LIDC_data import LIDC_IDRI
-from probabilistic_unet import ProbabilisticUnet
+from probabilistic_unet import ProbabilisticUnet, KendallProbUnet
 from utils import l2_regularisation
 from importlib.machinery import SourceFileLoader
 
@@ -30,8 +30,9 @@ small_number = torch.tensor(1e-8).cuda()
 np.random.seed(opt.random_seed) # NOTE seed needs to be the same in testing due to data splitting
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+print(device)
 dataset = LIDC_IDRI(dataset_location=cf.dataset_location)
-
+print('dataset read complete')
 dataset_size = len(dataset)
 indices = list(range(dataset_size))
 np.random.shuffle(indices)
@@ -62,7 +63,7 @@ def train(cf):
     if cf.model == 'vanilla_uq':
         net = ProbabilisticUnet(input_channels=cf.input_channels, num_classes=cf.num_classes, num_filters=cf.num_filters, latent_dim=cf.latent_dim, no_convs_fcomb=cf.no_convs_fcomb, beta=cf.beta, beta_w=cf.beta_w)
     elif cf.model == 'shape_uq':
-        net = KendallProbUnet(input_channels=cf.input_channels, num_classes=cf.num_classes, num_filters=cf.num_filters, k = cd.k, m = cf.m, no_convs_fcomb=cf.no_convs_fcomb, beta=cf.beta, beta_w=cf.beta_w)
+        net = KendallProbUnet(input_channels=cf.input_channels, num_classes=cf.num_classes, num_filters=cf.num_filters, k = cf.k, m = cf.m, no_convs_fcomb=cf.no_convs_fcomb, beta=cf.beta, beta_w=cf.beta_w)
     net.to(device)
 
     net.train()

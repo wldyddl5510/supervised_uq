@@ -450,7 +450,7 @@ Probabilistic Unet with Kendall Shape space embedding
 class KendallProbUnet(ProbabilisticUnet):
 
 
-    def __init__(self, input_channels=1, num_classes=1, num_filters=[32,64,128,192], k = 4, m = 2, no_convs_fcomb=4, beta=10.0):
-        super().__init__(input_channels, num_classes, num_filters, k * m, no_convs_fcomb, beta)
+    def __init__(self, input_channels=1, num_classes=1, num_filters=[32,64,128,192], k = 4, m = 2, no_convs_fcomb=4, beta=1.0, beta_w = 1.0):
+        super().__init__(input_channels, num_classes, num_filters, k * m, no_convs_fcomb, beta, beta_w)
         self.prior = KendallShapeVmf(self.input_channels, self.num_filters, self.no_convs_per_block, k, m,  self.initializers).to(device)
         self.posterior = KendallShapeVmf(self.input_channels, self.num_filters, self.no_convs_per_block, k, m, self.initializers, posterior=True).to(device)

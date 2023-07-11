@@ -6,7 +6,7 @@ from collections import OrderedDict
 
 config_path = os.path.realpath(__file__)
 
-model = "vanilla_uq"
+model = "shape_uq"
 input_channels = 1
 num_classes = 1
 num_filters = [32,64,128,192]
