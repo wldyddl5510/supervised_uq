@@ -1,3 +1,4 @@
 LIDC_data/
 ./LIDC_data/
 /LIDC_data/
+__pycache__/

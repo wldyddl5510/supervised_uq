@@ -59,9 +59,9 @@ val_loader = DataLoader(dataset, batch_size=32, sampler=val_sampler)
 print("Number of train/val/test patches:", (len(train_indices), len(val_indices), len(test_indices)))
 
 def train(cf):
-    if cf.model is 'vanilla_uq':
+    if cf.model == 'vanilla_uq':
         net = ProbabilisticUnet(input_channels=cf.input_channels, num_classes=cf.num_classes, num_filters=cf.num_filters, latent_dim=cf.latent_dim, no_convs_fcomb=cf.no_convs_fcomb, beta=cf.beta, beta_w=cf.beta_w)
-    elif cf.model is 'shape_uq':
+    elif cf.model == 'shape_uq':
         net = KendallProbUnet(input_channels=cf.input_channels, num_classes=cf.num_classes, num_filters=cf.num_filters, k = cd.k, m = cf.m, no_convs_fcomb=cf.no_convs_fcomb, beta=cf.beta, beta_w=cf.beta_w)
     net.to(device)
 
@@ -129,10 +129,10 @@ def train(cf):
 
         duration = time.time() - start_time
         print('epoch ' + str(epoch) + ' took ' + str(round(duration, 2)) + ' seconds, loss: ' + str(round(loss.item(), 2)))
-
-        if epoch == cf.epochs - 1:
-            output_ckpt_filename = opt.output_ckpt_dir + '/net-epochs-' + str(epoch) + '-ent_coeff-' + str(opt.entcoeff) + '-mask1reweight-' + str(opt.mask1reweight) + '-train_ratio-' + str(opt.trainratio) + '-randomseed-' + str(opt.random_seed) + '.pt'        
-            torch.save(net.state_dict(), output_ckpt_filename)
+        if cf.save:
+            if epoch == cf.epochs - 1:
+                output_ckpt_filename = opt.output_ckpt_dir + '/net-epochs-' + str(epoch) + '-ent_coeff-' + str(opt.entcoeff) + '-mask1reweight-' + str(opt.mask1reweight) + '-train_ratio-' + str(opt.trainratio) + '-randomseed-' + str(opt.random_seed) + '.pt'        
+                torch.save(net.state_dict(), output_ckpt_filename)
 
     return net
 
