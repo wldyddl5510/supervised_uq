@@ -74,9 +74,10 @@ def train(cf):
     for epoch in range(cf.epochs):
         start_time = time.time()
         loss = 0.
-        print('epoch ' + str(epoch))
+        # print('epoch ' + str(epoch))
         for step, (patch, masks, _) in enumerate(train_loader): 
-            #print('epoch ' + str(epoch) + ', step ' + str(step))
+            if (step % 20) == 0:
+                print('epoch ' + str(epoch) + ', step ' + str(step))
             patch = patch.to(device)
             masks = masks.to(device)
             elbo_sum = 0.
@@ -109,7 +110,8 @@ def train(cf):
             ce /= torch.log(torch.tensor(2.)).cuda() # log in binary_cross_entropy has base e
             entropy_loss = torch.mean(ce)
 
-            #print('entropy loss ' + str(entropy_loss.item()))
+            if (step % 20) == 0:
+                print('entropy loss ' + str(entropy_loss.item()))
 
             # weight regularization loss
             reg_loss = l2_regularisation(net.posterior) + \
@@ -118,18 +120,20 @@ def train(cf):
 
             # kl of w for variational dropout 
             kl_w = net.unet.regularizer()
-            #print('kl_w ' + str(kl_w.item()))
+            if (step % 20) == 0:
+                print('kl_w ' + str(kl_w.item()))
 
             # total loss
             inv_datalen = 1. / len(train_indices)
             loss = -elbo_sum + inv_datalen * cf.beta_w * kl_w + opt.entcoeff * entropy_loss + cf.l2_reg_coeff * reg_loss
-
+            if (step % 20) == 0:
+                print('total loss ' + str(loss.item()))
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
 
-        print('entropy loss ' + str(entropy_loss.item()))
-        print('kl_w ' + str(kl_w.item()))
+        #print('entropy loss ' + str(entropy_loss.item()))
+        #print('kl_w ' + str(kl_w.item()))
         duration = time.time() - start_time
         print('epoch ' + str(epoch) + ' took ' + str(round(duration, 2)) + ' seconds, loss: ' + str(round(loss.item(), 2)))
         if cf.save:

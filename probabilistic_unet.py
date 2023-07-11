@@ -439,7 +439,7 @@ class ProbabilisticUnet(nn.Module):
 
         elbo = -(self.reconstruction_loss + self.beta * self.kl)
 
-        print('elbo ' + str(elbo.item()) + ', recon_loss ' + str(self.reconstruction_loss.item()) + ', kl_z ' + str(self.kl.item()))
+        # print('elbo ' + str(elbo.item()) + ', recon_loss ' + str(self.reconstruction_loss.item()) + ', kl_z ' + str(self.kl.item()))
 
         return elbo
 
