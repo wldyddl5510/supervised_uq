@@ -139,6 +139,11 @@ def train(cf):
         if cf.save:
             if epoch == cf.epochs - 1:
                 output_ckpt_filename = opt.output_ckpt_dir + opt.model + '/net-epochs-' + str(epoch) + '-ent_coeff-' + str(opt.entcoeff) + '-mask1reweight-' + str(opt.mask1reweight) + '-train_ratio-' + str(opt.trainratio) + '-randomseed-' + str(opt.random_seed) + '.pt'        
+                #print(net.state_dict().keys())
+                # when saving convert to torch?
+                if opt.model == 'shape_uq':
+                    net.prior.encoder_mu.layers = net.prior.encoder_mu.layers.export()
+                    net.posterior.encoder_mu.layers = net.posterior.encoder_mu.layers.export()
                 torch.save(net.state_dict(), output_ckpt_filename)
 
     return net

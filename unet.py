@@ -53,16 +53,17 @@ class Unet(nn.Module):
             self.last_layer = nn.Conv2d(output, num_classes, kernel_size=1)
 
     
+    # FIXME: implement equivariant version
     # gaussian prior
     def svd_regularizer(self, mu, log_sigma):
         logvar = 2 * log_sigma
         return -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
-
+    # FIXME: Implement equivariant version
     def gaussian_layers(self):
         for module in self.modules():
             if type(module) == GaussianConv2d or type(module) == GaussianLinear: 
                 yield module
-
+    # FIXME: Implement equivariant version
     # Return sum of kls from all variational dropout layers
     def regularizer(self):
         kl = 0.0

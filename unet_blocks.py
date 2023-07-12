@@ -23,6 +23,7 @@ class DownConvBlock(nn.Module):
         layers.append(nn.Conv2d(output_dim, output_dim, kernel_size=3, stride=1, padding=int(padding)))
         layers.append(nn.ReLU(inplace=True))
 
+        # FIXME: Equivariant version
         if not vb:
             layers.append(nn.Conv2d(output_dim, output_dim, kernel_size=3, stride=1, padding=int(padding)))
         else:
