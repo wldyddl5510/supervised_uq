@@ -80,6 +80,7 @@ def train(cf):
                 print('epoch ' + str(epoch) + ', step ' + str(step))
             patch = patch.to(device)
             masks = masks.to(device)
+            print(masks)
             elbo_sum = 0.
             prior_preds = []
 

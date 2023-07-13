@@ -11,8 +11,8 @@ from scipy.linalg import helmert
 from escnn import gspaces
 from escnn import nn as escnn_nn
 
-# debugging
-import pdb
+# for bayesian
+from bayesian import GaussianConv2d, GaussianLinear
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
@@ -21,7 +21,7 @@ class Encoder(nn.Module):
     A convolutional neural network, consisting of len(num_filters) times a block of no_convs_per_block convolutional layers,
     after each block a pooling operation is performed. And after each convolutional layer a non-linear (ReLU) activation function is applied.
     """
-    def __init__(self, input_channels, num_filters, no_convs_per_block, initializers, padding=True, posterior=False):
+    def __init__(self, input_channels, num_filters, no_convs_per_block, initializers, padding=True, posterior=False, vb = False):
         super(Encoder, self).__init__()
         self.contracting_path = nn.ModuleList()
         self.input_channels = input_channels
@@ -46,8 +46,15 @@ class Encoder(nn.Module):
             layers.append(nn.Conv2d(input_dim, output_dim, kernel_size=3, padding=int(padding)))
             layers.append(nn.ReLU(inplace=True))
 
-            for _ in range(no_convs_per_block-1):
-                layers.append(nn.Conv2d(output_dim, output_dim, kernel_size=3, padding=int(padding)))
+            for j in range(no_convs_per_block-1):
+                # if not last filter append usual conv layer
+                if i != (len(num_filters) - 1):
+                    layers.append(nn.Conv2d(output_dim, output_dim, kernel_size=3, padding=int(padding)))
+                # if last layer
+                else:
+                    # on the very last layer, append gaussian conv layer
+                    if j == (no_convs_per_block - 1):
+                        layers.append(GaussianConv2d(output_dim, output_dim, kernel_size = 3, padding = int(padding))
                 layers.append(nn.ReLU(inplace=True))
 
         self.layers = nn.Sequential(*layers)
@@ -86,12 +93,12 @@ class EquiEncoder(Encoder):
                 layers.append(escnn_nn.PointwiseAvgPool2D(in_type, kernel_size=2, stride=2, padding=0, ceil_mode=True))
                 # in_type comes from the out_type of previous layers
             # first layer
-            else:
+            #else:
                 # i = 0
                 # we store the input type for wrapping the images into a geometric tensor during the forward pass
                 # We need to mask the input image since the corners are moved outside the grid under rotations
                 
-                layers.append(escnn_nn.MaskModule(self.input_type, 128, margin=1))
+                #layers.append(escnn_nn.MaskModule(self.input_type, 128, margin=1))
             
             layers.append(escnn_nn.R2Conv(in_type, out_type, kernel_size=3, padding=int(padding), bias = False))
             layers.append(escnn_nn.InnerBatchNorm(out_type))
@@ -425,7 +432,7 @@ class ProbabilisticUnet(nn.Module):
             kl_div = log_posterior_prob - log_prior_prob
         return kl_div
 
-    def elbo(self, segm, analytic_kl=False, reconstruct_posterior_mean=False):
+    def elbo(self, segm, analytic_kl=True, reconstruct_posterior_mean=False):
         """
         Calculate the evidence lower bound of the log-likelihood of P(Y|X)
         modified Eq. (4) of https://arxiv.org/abs/1806.05034
