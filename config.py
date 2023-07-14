@@ -22,5 +22,5 @@ adam_weight_decay = 0
 epochs = 100
 l2_reg_coeff = 1e-5
 train_retention_rate = 1.
-dataset_location = './LIDC_data/'
+dataset_location = '/users/jnp29/gunay/supervised_uq/LIDC_data/'
 save = True
