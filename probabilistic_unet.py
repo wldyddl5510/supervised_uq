@@ -47,14 +47,11 @@ class Encoder(nn.Module):
             layers.append(nn.ReLU(inplace=True))
 
             for j in range(no_convs_per_block-1):
-                # if not last filter append usual conv layer
-                if i != (len(num_filters) - 1):
-                    layers.append(nn.Conv2d(output_dim, output_dim, kernel_size=3, padding=int(padding)))
-                # if last layer
+                # if very last filter append gaussian conv layer
+                if i == (len(num_filters) - 1) and j == (no_convs_per_block - 2):
+                    layers.append(GaussianConv2d(output_dim, output_dim, kernel_size = 3, padding = int(padding)))
                 else:
-                    # on the very last layer, append gaussian conv layer
-                    if j == (no_convs_per_block - 1):
-                        layers.append(GaussianConv2d(output_dim, output_dim, kernel_size = 3, padding = int(padding))
+                    layers.append(nn.Conv2d(output_dim, output_dim, kernel_size=3, padding=int(padding)))
                 layers.append(nn.ReLU(inplace=True))
 
         self.layers = nn.Sequential(*layers)
@@ -129,7 +126,7 @@ class AxisAlignedConvGaussian(nn.Module):
     """
     A convolutional net that parametrizes a Gaussian distribution with axis aligned covariance matrix.
     """
-    def __init__(self, input_channels, num_filters, no_convs_per_block, latent_dim, initializers, posterior=False):
+    def __init__(self, input_channels, num_filters, no_convs_per_block, latent_dim, initializers, posterior=False, vb = False):
         super(AxisAlignedConvGaussian, self).__init__()
         self.input_channels = input_channels
         self.channel_axis = 1
@@ -141,7 +138,7 @@ class AxisAlignedConvGaussian(nn.Module):
             self.name = 'Posterior'
         else:
             self.name = 'Prior'
-        self.encoder = Encoder(self.input_channels, self.num_filters, self.no_convs_per_block, initializers, posterior=self.posterior)
+        self.encoder = Encoder(self.input_channels, self.num_filters, self.no_convs_per_block, initializers, posterior=self.posterior, vb = vb)
         self.conv_layer = nn.Conv2d(num_filters[-1], 2 * self.latent_dim, (1,1), stride=1)
         self.show_img = 0
         self.show_seg = 0
@@ -351,7 +348,7 @@ class ProbabilisticUnet(nn.Module):
     no_cons_per_block: no convs per block in the (convolutional) encoder of prior and posterior
     """
 
-    def __init__(self, input_channels=1, num_classes=1, num_filters=[32,64,128,192], latent_dim=6, no_convs_fcomb=4, beta=1.0, beta_w=1.0):
+    def __init__(self, input_channels=1, num_classes=1, num_filters=[32,64,128,192], latent_dim=6, no_convs_fcomb=4, beta=1.0, beta_w=1.0, vb = False):
         super(ProbabilisticUnet, self).__init__()
         self.input_channels = input_channels
         self.num_classes = num_classes
@@ -365,8 +362,8 @@ class ProbabilisticUnet(nn.Module):
         self.z_prior_sample = 0
 
         self.unet = Unet(self.input_channels, self.num_classes, self.num_filters, self.initializers, apply_last_layer=False, padding=True).to(device)
-        self.prior = AxisAlignedConvGaussian(self.input_channels, self.num_filters, self.no_convs_per_block, self.latent_dim,  self.initializers,).to(device)
-        self.posterior = AxisAlignedConvGaussian(self.input_channels, self.num_filters, self.no_convs_per_block, self.latent_dim, self.initializers, posterior=True).to(device)
+        self.prior = AxisAlignedConvGaussian(self.input_channels, self.num_filters, self.no_convs_per_block, self.latent_dim,  self.initializers, posterior = False, vb = vb).to(device)
+        self.posterior = AxisAlignedConvGaussian(self.input_channels, self.num_filters, self.no_convs_per_block, self.latent_dim, self.initializers, posterior=True, vb = vb).to(device)
         self.fcomb = Fcomb(self.num_filters, self.latent_dim, self.input_channels, self.num_classes, self.no_convs_fcomb, {'w':'orthogonal', 'b':'normal'}, use_tile=True).to(device)
 
     def forward(self, patch, segm, training=True):

@@ -19,6 +19,7 @@ parser.add_argument('--entcoeff', type=float, default=1.0, help='coeffient for t
 parser.add_argument('--mask1reweight', type=float, default=1.0, help='coeffient for reweighting the masks of 1s')
 parser.add_argument('--trainratio', type=float, default=1.0, help='training data retention rate')
 parser.add_argument('--random_seed', type=int, default=123, help='random seed')
+parser.add_argument('--vb', type = bool, default = False, help = 'whether apply variational dropout to encoder')
 opt = parser.parse_args()
 print(opt)
 
@@ -60,7 +61,7 @@ print("Number of train/val/test patches:", (len(train_indices), len(val_indices)
 
 def train(cf):
     if opt.model == 'vanilla_uq':
-        net = ProbabilisticUnet(input_channels=cf.input_channels, num_classes=cf.num_classes, num_filters=cf.num_filters, latent_dim=cf.latent_dim, no_convs_fcomb=cf.no_convs_fcomb, beta=cf.beta, beta_w=cf.beta_w)
+        net = ProbabilisticUnet(input_channels=cf.input_channels, num_classes=cf.num_classes, num_filters=cf.num_filters, latent_dim=cf.latent_dim, no_convs_fcomb=cf.no_convs_fcomb, beta=cf.beta, beta_w=cf.beta_w, vb = opt.vb)
     elif opt.model == 'shape_uq':
         net = KendallProbUnet(input_channels=cf.input_channels, num_classes=cf.num_classes, num_filters=cf.num_filters, k = cf.k, m = cf.m, no_convs_fcomb=cf.no_convs_fcomb, beta=cf.beta, beta_w=cf.beta_w)
     net.to(device)
@@ -80,7 +81,6 @@ def train(cf):
                 print('epoch ' + str(epoch) + ', step ' + str(step))
             patch = patch.to(device)
             masks = masks.to(device)
-            print(masks)
             elbo_sum = 0.
             prior_preds = []
 
@@ -139,7 +139,7 @@ def train(cf):
         print('epoch ' + str(epoch) + ' took ' + str(round(duration, 2)) + ' seconds, loss: ' + str(round(loss.item(), 2)))
         if cf.save:
             if epoch == cf.epochs - 1:
-                output_ckpt_filename = opt.output_ckpt_dir + opt.model + '/net-epochs-' + str(epoch) + '-ent_coeff-' + str(opt.entcoeff) + '-mask1reweight-' + str(opt.mask1reweight) + '-train_ratio-' + str(opt.trainratio) + '-randomseed-' + str(opt.random_seed) + '.pt'        
+                output_ckpt_filename = opt.output_ckpt_dir + opt.model + '/vb_' + str(opt.vb) + '/net-epochs-' + str(epoch) + '-ent_coeff-' + str(opt.entcoeff) + '-mask1reweight-' + str(opt.mask1reweight) + '-train_ratio-' + str(opt.trainratio) + '-randomseed-' + str(opt.random_seed) + '.pt'        
                 #print(net.state_dict().keys())
                 # when saving convert to torch?
                 if opt.model == 'shape_uq':
