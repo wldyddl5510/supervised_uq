@@ -127,6 +127,13 @@ def train(cf):
             # total loss
             inv_datalen = 1. / len(train_indices)
             loss = -elbo_sum + inv_datalen * cf.beta_w * kl_w + opt.entcoeff * entropy_loss + cf.l2_reg_coeff * reg_loss
+            # if adding variational dropout to encoder too
+            # not sure: both on prior and posterior? or only on prior?
+            if opt.vb:
+                kl_w_en = net.prior.regularizer()
+                if (step % 20) == 0:
+                    print('kl_w_en ' + str(kl_w_en.item()))
+                loss += (cf.beta_w_en * kl_w_en)
             if (step % 20) == 0:
                 print('total loss ' + str(loss.item()))
             optimizer.zero_grad()

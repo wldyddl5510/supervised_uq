@@ -62,6 +62,24 @@ class Encoder(nn.Module):
         output = self.layers(input)
         return output
 
+    # for gaussian prior
+    def svd_regularizer(self, mu, log_sigma):
+        logvar = 2 * log_sigma
+        return -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
+
+    # seeking gaussian layers in model
+    def gaussian_layers(self):
+        for module in self.layers:
+            if type(module) == GaussianConv2d or type(module) == GaussianLinear:
+                yield module
+    
+    # for kl_w_encoder
+    def regularizer(self):
+        kl = 0.0
+        for module in self.gaussian_layers():
+            kl += self.svd_regularizer(module.weight, module.log_sigma)
+        return kl
+
 
 """
 escnn encoder to encode equivariant layer
@@ -181,6 +199,9 @@ class AxisAlignedConvGaussian(nn.Module):
         dist = Independent(Normal(loc=mu, scale=torch.exp(log_sigma)),1)
         return dist
 
+    # return kl_w_en
+    def regularizer(self):
+        return self.encoder.regularizer()
 
 """
 NN to return Von Mises Fisher distributions on the Kendall Shape space instead of vanilla Gaussian.
