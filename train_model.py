@@ -133,7 +133,10 @@ def train(cf):
                 kl_w_en = net.prior.regularizer()
                 if (step % 20) == 0:
                     print('kl_w_en ' + str(kl_w_en.item()))
-                loss += (cf.beta_w_en * kl_w_en)
+                loss += (cf.beta_w_en * kl_w_en + cf.beta_w * kl_w)
+            else:
+                # all hyperparam into one w
+                loss += (cf.beta_w_en + cf.beta_w) * kl_w
             if (step % 20) == 0:
                 print('total loss ' + str(loss.item()))
             optimizer.zero_grad()
