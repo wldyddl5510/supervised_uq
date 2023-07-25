@@ -192,7 +192,6 @@ def create_sample(cf, net):
         #testiter = iter(test_loader)
         for j, (patch, masks, _) in enumerate(test_loader):
             masks = torch.squeeze(masks, 0)
-            patch = patch.to(device)
             # image
             plt.imshow(patch[0,:,:],cmap='Greys')
             plt.savefig(imgpath + 'base_img_' + str(j) + '.png')
@@ -200,6 +199,7 @@ def create_sample(cf, net):
             plt.imshow(masks[0,:,:], cmap = 'Greys')
             # predicted seg
             net.eval()
+            patch = patch.to(device)
             for i in range(cf.num_save_seg_per_img):
                 mask_sample = net.sample(patch, None, testing = True)
                 mask_sample = (torch.sigmoid(mask_sample) > 0.5).float()
