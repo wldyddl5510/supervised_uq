@@ -11,7 +11,7 @@ from load_LIDC_data import LIDC_IDRI
 from probabilistic_unet import ProbabilisticUnet, KendallProbUnet
 from utils import l2_regularisation
 from importlib.machinery import SourceFileLoader
-import mathplotlib.pyplot as plt
+import matplotlib.pyplot as plt
 import random
 
 parser = argparse.ArgumentParser(description='Supervised uncertainty quantification')
