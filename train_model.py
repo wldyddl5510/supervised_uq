@@ -11,6 +11,8 @@ from load_LIDC_data import LIDC_IDRI
 from probabilistic_unet import ProbabilisticUnet, KendallProbUnet
 from utils import l2_regularisation
 from importlib.machinery import SourceFileLoader
+import mathplotlib.pyplot as plt
+import random
 
 parser = argparse.ArgumentParser(description='Supervised uncertainty quantification')
 parser.add_argument('--model', type = str, default = 'vanilla_uq', help = 'vanilla or shape uq')
@@ -157,10 +159,11 @@ def train(cf):
         #print('kl_w ' + str(kl_w.item()))
         duration = time.time() - start_time
         print('epoch ' + str(epoch) + ' took ' + str(round(duration, 2)) + ' seconds, loss: ' + str(round(loss.item(), 2)))
-        if cf.save:
+        if cf.save_model:
             if epoch == cf.epochs - 1:
-                output_ckpt_filename = opt.output_ckpt_dir + opt.model + '/vb_' + str(opt.vb) + '/net-epochs-' + str(epoch) + '-ent_coeff-' + str(opt.entcoeff) + '-mask1reweight-' + str(opt.mask1reweight) + '-train_ratio-' + str(opt.trainratio) + '-randomseed-' + str(opt.random_seed) + '.pt'        
-                #print(net.state_dict().keys())
+                output_ckpt_filepath = opt.output_ckpt_dir + opt.model + '/vb_' + str(opt.vb) + '/net-epochs-' + str(epoch) + '-ent_coeff-' + str(opt.entcoeff) + '-mask1reweight-' + str(opt.mask1reweight) + '-train_ratio-' + str(opt.trainratio) + '-randomseed-' + str(opt.random_seed) + '/'
+                output_ckpt_filename = output_ckpt_filepath + 'model.pt'
+                # output_ckpt_filename = opt.output_ckpt_dir + opt.model + '/vb_' + str(opt.vb) + '/net-epochs-' + str(epoch) + '-ent_coeff-' + str(opt.entcoeff) + '-mask1reweight-' + str(opt.mask1reweight) + '-train_ratio-' + str(opt.trainratio) + '-randomseed-' + str(opt.random_seed) + '.pt'        
                 # when saving convert to torch?
                 if opt.model == 'shape_uq':
                     net.prior.encoder_mu.layers = net.prior.encoder_mu.layers.export()
@@ -169,8 +172,15 @@ def train(cf):
 
     return net
 
-def create_sample(net):
+def create_sample(cf, net):
     # TODO: Implement creating samples from trained network
+    if cf.save_mask_ex:
+        imgpath = output_ckpt_filepath = opt.output_ckpt_dir + opt.model + '/vb_' + str(opt.vb) + '/net-epochs-' + str(epoch) + '-ent_coeff-' + str(opt.entcoeff) + '-mask1reweight-' + str(opt.mask1reweight) + '-train_ratio-' + str(opt.trainratio) + '-randomseed-' + str(opt.random_seed) + '/images/'
+        
+        val_indices = indices[split_1:split_2]
+            
+        plt.imshow(pred[0,:,:],cmap='Greys')
+        plt.savefig(imgpath + '.png')
 
 if __name__ == "__main__":
     net = train(cf)
