@@ -169,5 +169,8 @@ def train(cf):
 
     return net
 
+def create_sample(net):
+    # TODO: Implement creating samples from trained network
+
 if __name__ == "__main__":
     net = train(cf)
