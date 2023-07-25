@@ -20,6 +20,7 @@ parser.add_argument('--mask1reweight', type=float, default=1.0, help='coeffient 
 parser.add_argument('--trainratio', type=float, default=1.0, help='training data retention rate')
 parser.add_argument('--random_seed', type=int, default=123, help='random seed')
 parser.add_argument('--vb', type = bool, default = False, help = 'whether apply variational dropout to encoder')
+parser.add_argument('--uq', type = bool, default = False, help = 'whether perform uq or vanilla prob Unet')
 opt = parser.parse_args()
 print(opt)
 
@@ -106,37 +107,46 @@ def train(cf):
             prior_preds = torch.cat(prior_preds, 1) 
             mean_prior_preds = torch.mean(prior_preds, 1) 
             mean_masks = torch.mean(masks, 1) 
+            
+            if opt.uq:
+                # entropy loss for matching aleatoric uncertainty
+                ce = F.binary_cross_entropy(mean_prior_preds, mean_masks.detach(), reduction='none') 
+                ce /= torch.log(torch.tensor(2.)).cuda() # log in binary_cross_entropy has base e
+                entropy_loss = torch.mean(ce)
 
-            ce = F.binary_cross_entropy(mean_prior_preds, mean_masks.detach(), reduction='none') 
-            ce /= torch.log(torch.tensor(2.)).cuda() # log in binary_cross_entropy has base e
-            entropy_loss = torch.mean(ce)
+                if (step % 20) == 0:
+                    print('entropy loss ' + str(entropy_loss.item()))
+                
+                # kl of w for variational dropout -> this is for epistemic uncertainty
+                kl_w = net.unet.regularizer()
+                if (step % 20) == 0:
+                    print('kl_w ' + str(kl_w.item()))
 
-            if (step % 20) == 0:
-                print('entropy loss ' + str(entropy_loss.item()))
 
             # weight regularization loss
             reg_loss = l2_regularisation(net.posterior) + \
                        l2_regularisation(net.prior) + \
                        l2_regularisation(net.fcomb.layers)
 
-            # kl of w for variational dropout 
-            kl_w = net.unet.regularizer()
-            if (step % 20) == 0:
-                print('kl_w ' + str(kl_w.item()))
 
             # total loss
             inv_datalen = 1. / len(train_indices)
-            loss = -elbo_sum + inv_datalen * cf.beta_w * kl_w + opt.entcoeff * entropy_loss + cf.l2_reg_coeff * reg_loss
-            # if adding variational dropout to encoder too
-            # not sure: both on prior and posterior? or only on prior?
-            if opt.vb:
-                kl_w_en = net.prior.regularizer()
-                if (step % 20) == 0:
-                    print('kl_w_en ' + str(kl_w_en.item()))
-                loss += (cf.beta_w_en * kl_w_en + cf.beta_w * kl_w)
+            # perform uq?
+            if opt.uq:
+                loss = -elbo_sum + opt.entcoeff * entropy_loss + cf.l2_reg_coeff * reg_loss
+                # if adding variational dropout to encoder too
+                # not sure: both on prior and posterior? or only on prior?
+                if opt.vb:
+                    kl_w_en = net.prior.regularizer()
+                    if (step % 20) == 0:
+                        print('kl_w_en ' + str(kl_w_en.item()))
+                    loss += (inv_datalen * cf.beta_w_en * kl_w_en + inv_datalen * cf.beta_w * kl_w)
+                else:
+                    # all hyperparam into one w
+                    loss += inv_datalen * (cf.beta_w_en + cf.beta_w) * kl_w
+            # no uq -> no ent loss and kl_w loss
             else:
-                # all hyperparam into one w
-                loss += (cf.beta_w_en + cf.beta_w) * kl_w
+                loss = -elbo_sum + cf.l2_reg_coeff * reg_loss
             if (step % 20) == 0:
                 print('total loss ' + str(loss.item()))
             optimizer.zero_grad()
