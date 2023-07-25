@@ -9,10 +9,11 @@ from torch.utils.data.sampler import SubsetRandomSampler
 from torch.distributions import Normal, Independent, kl
 from load_LIDC_data import LIDC_IDRI
 from probabilistic_unet import ProbabilisticUnet, KendallProbUnet
-from utils import l2_regularisation
+from utils import l2_regularisation, save_mask_prediction_example
 from importlib.machinery import SourceFileLoader
 import matplotlib.pyplot as plt
-import random
+import os
+import pdb
 
 parser = argparse.ArgumentParser(description='Supervised uncertainty quantification')
 parser.add_argument('--model', type = str, default = 'vanilla_uq', help = 'vanilla or shape uq')
@@ -60,7 +61,15 @@ train_loader = DataLoader(dataset, batch_size=8, sampler=train_sampler)
 val_sampler = SubsetRandomSampler(val_indices)
 val_loader = DataLoader(dataset, batch_size=32, sampler=val_sampler)
 
+# test set
+test_sampler = SubsetRandomSampler(test_indices)
+test_loader = DataLoader(dataset, batch_size = 1, sampler = test_sampler, shuffle = False)
+
 print("Number of train/val/test patches:", (len(train_indices), len(val_indices), len(test_indices)))
+
+# path
+output_ckpt_filepath = opt.output_ckpt_dir + opt.model + '/vb_' + str(opt.vb) + '/uq_' + str(opt.uq) + '/net-epochs-' + str(cf.epochs) + '-ent_coeff-' + str(opt.entcoeff) + '-mask1reweight-' + str(    opt.mask1reweight) + '-train_ratio-' + str(opt.trainratio) + '-randomseed-' + str(opt.random_seed)
+os.makedirs(output_ckpt_filepath, exist_ok = True)
 
 def train(cf):
     if opt.model == 'vanilla_uq':
@@ -161,7 +170,8 @@ def train(cf):
         print('epoch ' + str(epoch) + ' took ' + str(round(duration, 2)) + ' seconds, loss: ' + str(round(loss.item(), 2)))
         if cf.save_model:
             if epoch == cf.epochs - 1:
-                output_ckpt_filepath = opt.output_ckpt_dir + opt.model + '/vb_' + str(opt.vb) + '/net-epochs-' + str(epoch) + '-ent_coeff-' + str(opt.entcoeff) + '-mask1reweight-' + str(opt.mask1reweight) + '-train_ratio-' + str(opt.trainratio) + '-randomseed-' + str(opt.random_seed) + '/'
+#output_ckpt_filepath = opt.output_ckpt_dir + opt.model + '/vb_' + str(opt.vb) + '/net-epochs-' + str(epoch) + '-ent_coeff-' + str(opt.entcoeff) + '-mask1reweight-' + str(opt.mask1reweight) + '-train_ratio-' + str(opt.trainratio) + '-randomseed-' + str(opt.random_seed)
+#os.makedirs(output_ckpt_filepath, exist_ok = True)
                 output_ckpt_filename = output_ckpt_filepath + 'model.pt'
                 # output_ckpt_filename = opt.output_ckpt_dir + opt.model + '/vb_' + str(opt.vb) + '/net-epochs-' + str(epoch) + '-ent_coeff-' + str(opt.entcoeff) + '-mask1reweight-' + str(opt.mask1reweight) + '-train_ratio-' + str(opt.trainratio) + '-randomseed-' + str(opt.random_seed) + '.pt'        
                 # when saving convert to torch?
@@ -175,12 +185,30 @@ def train(cf):
 def create_sample(cf, net):
     # TODO: Implement creating samples from trained network
     if cf.save_mask_ex:
-        imgpath = output_ckpt_filepath = opt.output_ckpt_dir + opt.model + '/vb_' + str(opt.vb) + '/net-epochs-' + str(epoch) + '-ent_coeff-' + str(opt.entcoeff) + '-mask1reweight-' + str(opt.mask1reweight) + '-train_ratio-' + str(opt.trainratio) + '-randomseed-' + str(opt.random_seed) + '/images/'
-        
-        val_indices = indices[split_1:split_2]
-            
-        plt.imshow(pred[0,:,:],cmap='Greys')
-        plt.savefig(imgpath + '.png')
+        imgpath = output_ckpt_filepath + '/images'
+        os.makedirs(imgpath, exist_ok = True)
+#imgpath = output_ckpt_filepath = opt.output_ckpt_dir + opt.model + '/vb_' + str(opt.vb) + '/net-epochs-' + str(epoch) + '-ent_coeff-' + str(opt.entcoeff) + '-mask1reweight-' + str(opt.mask1reweight) + '-train_ratio-' + str(opt.trainratio) + '-randomseed-' + str(opt.random_seed) + '/images/'
+        #pdb.set_trace()
+        #testiter = iter(test_loader)
+        for j, (patch, masks, _) in enumerate(test_loader):
+            masks = torch.squeeze(masks, 0)
+            patch = patch.to(device)
+            # image
+            plt.imshow(patch[0,:,:],cmap='Greys')
+            plt.savefig(imgpath + 'base_img_' + str(j) + '.png')
+            # ground truth seg
+            plt.imshow(masks[0,:,:], cmap = 'Greys')
+            # predicted seg
+            net.eval()
+            for i in range(cf.num_save_seg_per_img):
+                mask_sample = net.sample(patch, None, testing = True)
+                mask_sample = (torch.sigmoid(mask_sample) > 0.5).float()
+                mask_sample = torch.squeeze(mask_sample, 0)
+                plt.imshow(mask_sample[0,:,:], cmap = 'Greys')
+                plt.savefig(imgpath + 'base_img_seg_' + str(i) + '.png')
+            if j >= 10:
+                break
 
 if __name__ == "__main__":
     net = train(cf)
+    create_sample(cf, net)
