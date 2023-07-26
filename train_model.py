@@ -193,19 +193,32 @@ def create_sample(cf, net):
         for j, (patch, masks, _) in enumerate(test_loader):
             masks = torch.squeeze(masks, 0)
             # image
-            plt.imshow(patch[0,:,:],cmap='Greys')
-            plt.savefig(imgpath + 'base_img_' + str(j) + '.png')
+            #pdb.set_trace()
+            # works?
+            plt.imshow(patch[0,0,:,:],cmap='Greys')
+            plt.savefig(imgpath + '/base_img_' + str(j) + '.png')
             # ground truth seg
             plt.imshow(masks[0,:,:], cmap = 'Greys')
+            plt.savefig(imgpath + '/base_img_' + str(j) + '_gt.png')
             # predicted seg
             net.eval()
             patch = patch.to(device)
+            net.forward(patch, segm = None, training = False)
+            #predictions = []
             for i in range(cf.num_save_seg_per_img):
                 mask_sample = net.sample(patch, None, testing = True)
-                mask_sample = (torch.sigmoid(mask_sample) > 0.5).float()
+                #pdb.set_trace()
+                mask_sample = (torch.sigmoid(mask_sample) >= 0.5).float()
                 mask_sample = torch.squeeze(mask_sample, 0)
+                mask_sample = mask_sample.cpu()
+                #predictions.append(mask_sample)
                 plt.imshow(mask_sample[0,:,:], cmap = 'Greys')
-                plt.savefig(imgpath + 'base_img_seg_' + str(i) + '.png')
+                plt.savefig(imgpath + '/base_img_' + str(j) + '_seg_' + str(i) + '.png')
+            # convert to cpu
+#predictions_cpu = torch.tensor(predictions, device = 'cpu')
+#for i in range(cf.num_save_seg_per_img):
+#plt.imshow(predictions_cpu[i][0,:,:], cmap = 'Greys')
+#plt.savefig(imgpath + 'base_img_seg_' + str(i) + '.png')
             if j >= 10:
                 break
 

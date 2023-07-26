@@ -488,3 +488,6 @@ class KendallProbUnet(ProbabilisticUnet):
         self.prior = KendallShapeVmf(self.input_channels, self.num_filters, self.no_convs_per_block, k, m,  self.initializers).to(device)
         #self.prior = Independent(HypersphericalUniform((k - 1) * m - 1).to(device)
         self.posterior = KendallShapeVmf(self.input_channels, self.num_filters, self.no_convs_per_block, k, m, self.initializers, posterior=True).to(device)
+
+    def elbo(self, segm, analytic_kl = False, reconstruct_posterior_mean = False):
+        return super().elbo(segm, analytic_kl, reconstruct_posterior_mean)
