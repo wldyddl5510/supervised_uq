@@ -39,7 +39,7 @@ dataset = LIDC_IDRI(dataset_location=cf.dataset_location)
 print('dataset read complete')
 dataset_size = len(dataset)
 indices = list(range(dataset_size))
-np.random.shuffle(indices)
+# np.random.shuffle(indices)
 
 split_1 = int(0.7 * dataset_size)
 split_2 = int(0.85 * dataset_size)
@@ -62,8 +62,9 @@ val_sampler = SubsetRandomSampler(val_indices)
 val_loader = DataLoader(dataset, batch_size=32, sampler=val_sampler)
 
 # test set
-test_sampler = SubsetRandomSampler(test_indices)
-test_loader = DataLoader(dataset, batch_size = 1, sampler = test_sampler, shuffle = False)
+#test_sampler = SubsetRandomSampler(test_indices)
+# test_sampler = 
+test_loader = DataLoader(dataset, batch_size = 1, shuffle = False)
 
 print("Number of train/val/test patches:", (len(train_indices), len(val_indices), len(test_indices)))
 

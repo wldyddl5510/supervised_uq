@@ -25,5 +25,5 @@ train_retention_rate = 1.
 dataset_location = '/users/jnp29/gunay/Probabilistic-Neural-Networks/LIDC_data/'
 save_model = False
 save_mask_ex = True
-num_save_base_img = 10
-num_save_seg_per_img = 10
+num_save_base_img = 30
+num_save_seg_per_img = 5
